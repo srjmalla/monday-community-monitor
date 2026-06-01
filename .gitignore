@@ -1,0 +1,6 @@
+.env
+scraper.db
+opportunities.csv
+__pycache__/
+*.pyc
+.claude/
