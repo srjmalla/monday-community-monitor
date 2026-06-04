@@ -155,10 +155,23 @@ with st.sidebar:
     if st.button("🤖  Analyze new posts", use_container_width=True):
         st.session_state["running"] = "analyze"
 
-    if st.button("🔄  Re-analyze all", use_container_width=True):
-        _db.init_db()
-        _db.clear_analyses()
-        st.session_state["running"] = "analyze"
+    st.divider()
+
+    if st.button("🗑️  Reset database", use_container_width=True, type="secondary"):
+        st.session_state["confirm_reset"] = True
+
+    if st.session_state.get("confirm_reset"):
+        st.warning("This will delete all scraped posts and analyses.")
+        col1, col2 = st.columns(2)
+        if col1.button("Yes, reset", type="primary", use_container_width=True):
+            _db.init_db()
+            _db.reset_db()
+            st.session_state.pop("confirm_reset")
+            st.session_state["flash"] = "Database reset. Scrape to start fresh."
+            st.rerun()
+        if col2.button("Cancel", use_container_width=True):
+            st.session_state.pop("confirm_reset")
+            st.rerun()
 
     st.divider()
     st.caption("Monitors community.monday.com for posts where Jetpack Apps solve a real pain point.")
