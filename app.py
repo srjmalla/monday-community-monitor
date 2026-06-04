@@ -106,17 +106,18 @@ def render_card(post: dict, analysis: dict, key_prefix: str, status: str = "New"
     s_icon  = STATUS_ICON.get(status, "")
 
     with st.expander(f"{dot} {s_icon} **{post['title']}**", expanded=True):
-        status_col, _ = st.columns([1, 3])
+        _, status_col = st.columns([3, 1])
         with status_col:
             st.selectbox(
                 "Status",
                 STATUS_OPTIONS,
+                format_func=lambda s: f"{STATUS_ICON.get(s, '')}  {s}",
                 index=STATUS_OPTIONS.index(status) if status in STATUS_OPTIONS else 0,
                 key=f"status_{post['id']}",
                 on_change=_save_status,
                 args=(post["id"],),
+                label_visibility="collapsed",
             )
-        st.divider()
         info_col, reply_col = st.columns([1, 2])
         with info_col:
             st.markdown(f"**Score:** {score}/10")
@@ -154,24 +155,6 @@ with st.sidebar:
 
     if st.button("🤖  Analyze new posts", use_container_width=True):
         st.session_state["running"] = "analyze"
-
-    st.divider()
-
-    if st.button("🗑️  Reset database", use_container_width=True, type="secondary"):
-        st.session_state["confirm_reset"] = True
-
-    if st.session_state.get("confirm_reset"):
-        st.warning("This will delete all scraped posts and analyses.")
-        col1, col2 = st.columns(2)
-        if col1.button("Yes, reset", type="primary", use_container_width=True):
-            _db.init_db()
-            _db.reset_db()
-            st.session_state.pop("confirm_reset")
-            st.session_state["flash"] = "Database reset. Scrape to start fresh."
-            st.rerun()
-        if col2.button("Cancel", use_container_width=True):
-            st.session_state.pop("confirm_reset")
-            st.rerun()
 
     st.divider()
     st.caption("Monitors community.monday.com for posts where Jetpack Apps solve a real pain point.")
