@@ -1,6 +1,4 @@
 import json
-import subprocess
-import sys
 import sqlite3
 import os
 
@@ -10,6 +8,7 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 import db as _db
 from analyzer import analyze_post
+from bettermode import scrape_spaces
 
 st.set_page_config(
     page_title="JetpackApps Community Monitor",
@@ -39,13 +38,14 @@ def db_stats():
         return 0, 0, 0
 
 
-def load_opportunities(min_score: int, apps_filter: list):
+def load_opportunities(min_score: int, apps_filter: list, status_filter: list):
     try:
         with get_conn() as c:
             rows = c.execute(
                 """SELECT p.id, p.url, p.title, p.space_name, p.created_at, p.replies,
                           p.matched_phrases, p.resource_url,
-                          a.matched_apps, a.score, a.reasoning, a.draft_reply
+                          a.matched_apps, a.score, a.reasoning, a.draft_reply,
+                          COALESCE(a.status, 'New') AS status
                    FROM posts p JOIN analyses a ON a.post_id = p.id
                    WHERE a.is_opportunity=1 AND a.score >= ?
                    ORDER BY a.score DESC, p.replies DESC""",
@@ -56,8 +56,11 @@ def load_opportunities(min_score: int, apps_filter: list):
 
     result = []
     for r in rows:
-        apps = json.loads(r["matched_apps"] or "[]")
+        apps   = json.loads(r["matched_apps"] or "[]")
+        status = r["status"] or "New"
         if apps_filter and not any(a in apps_filter for a in apps):
+            continue
+        if status_filter and status not in status_filter:
             continue
         result.append({
             "id":              r["id"],
@@ -72,41 +75,48 @@ def load_opportunities(min_score: int, apps_filter: list):
             "url":             r["url"],
             "reasoning":       r["reasoning"],
             "draft_reply":     r["draft_reply"],
+            "status":          status,
         })
     return result
 
 
-def run_scrape():
-    """Run scraper as subprocess and stream output live."""
-    placeholder = st.empty()
-    lines = []
-    proc = subprocess.Popen(
-        [sys.executable, "main.py", "scrape"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        bufsize=1,
-    )
-    for line in proc.stdout:
-        line = line.rstrip()
-        if any(w in line for w in ("FutureWarning", "warnings.warn", "NotOpenSSLWarning")):
-            continue
-        lines.append(line)
-        placeholder.code("\n".join(lines[-40:]))
-    proc.wait()
-    return proc.returncode
 
 
 SCORE_COLOR = {10: "🔴", 9: "🔴", 8: "🟠", 7: "🟡", 6: "🟢"}
 
+STATUS_OPTIONS = ["New", "Stuck", "Ready to review", "Not relevant", "Responded"]
+STATUS_ICON = {
+    "New":             "🆕",
+    "Stuck":           "🟡",
+    "Ready to review": "👀",
+    "Not relevant":    "❌",
+    "Responded":       "✅",
+}
 
-def render_card(post: dict, analysis: dict, key_prefix: str):
-    score  = analysis.get("score", 0)
-    apps   = analysis.get("matched_apps", [])
-    dot    = SCORE_COLOR.get(score, "⚪")
+
+def _save_status(post_id: str):
+    _db.update_status(post_id, st.session_state[f"status_{post_id}"])
+
+
+def render_card(post: dict, analysis: dict, key_prefix: str, status: str = "New"):
+    score   = analysis.get("score", 0)
+    apps    = analysis.get("matched_apps", [])
+    dot     = SCORE_COLOR.get(score, "⚪")
     phrases = json.loads(post.get("matched_phrases") or "[]")
+    s_icon  = STATUS_ICON.get(status, "")
 
-    with st.expander(f"{dot} **{post['title']}**", expanded=True):
+    with st.expander(f"{dot} {s_icon} **{post['title']}**", expanded=True):
+        status_col, _ = st.columns([1, 3])
+        with status_col:
+            st.selectbox(
+                "Status",
+                STATUS_OPTIONS,
+                index=STATUS_OPTIONS.index(status) if status in STATUS_OPTIONS else 0,
+                key=f"status_{post['id']}",
+                on_change=_save_status,
+                args=(post["id"],),
+            )
+        st.divider()
         info_col, reply_col = st.columns([1, 2])
         with info_col:
             st.markdown(f"**Score:** {score}/10")
@@ -115,9 +125,11 @@ def render_card(post: dict, analysis: dict, key_prefix: str):
             st.markdown(f"**Replies:** {post.get('replies', 0)}  •  **Posted:** {(post.get('created_at') or '')[:10]}")
             st.markdown(f"**Why:** {analysis.get('reasoning', '')}")
             if phrases:
-                st.markdown("**Keywords:** " + "  ".join(f"`{p}`" for p in phrases))
-            if post.get("resource_url"):
-                st.markdown(f"**Link:** [{post['resource_url']}]({post['resource_url']})")
+                url = post.get("resource_url", "")
+                if url:
+                    st.markdown("**Keywords:** " + "  ".join(f"[`{p}`]({url})" for p in phrases))
+                else:
+                    st.markdown("**Keywords:** " + "  ".join(f"`{p}`" for p in phrases))
             st.link_button("Open post ↗", post["url"])
         with reply_col:
             st.markdown("**Draft reply:**")
@@ -150,12 +162,50 @@ with st.sidebar:
 
 if st.session_state.get("running") == "scrape":
     st.session_state.pop("running")
-    st.subheader("Scraping community posts…")
-    code = run_scrape()
-    if code == 0:
-        st.success("Done! Refresh the page to see updated results.")
-    else:
-        st.error(f"Scraper exited with code {code}")
+    _db.init_db()
+
+    st.subheader("Scraping community.monday.com…")
+    progress_bar = st.progress(0.0)
+    status       = st.empty()
+
+    def _on_progress(space_name, space_idx, total_spaces, page, pages_per_space, total_matches):
+        frac = ((space_idx - 1) * pages_per_space + (page - 1)) / (total_spaces * pages_per_space)
+        progress_bar.progress(min(frac, 1.0))
+        status.caption(f"**{space_name}** — page {page} of {pages_per_space}  ·  {total_matches} matches found")
+
+    posts = scrape_spaces(on_progress=_on_progress)
+
+    new = 0
+    new_ids = set()
+    for p in posts:
+        if not _db.post_exists(p["id"]):
+            _db.insert_post(**{k: v for k, v in p.items()})
+            new_ids.add(p["id"])
+            new += 1
+
+    progress_bar.progress(1.0)
+    status.empty()
+    st.success(f"Done — {new} new posts saved from {len(posts)} keyword matches.")
+
+    if posts:
+        st.subheader("Scraped posts")
+        st.caption("New posts are marked 🆕 — all are queued for analysis.")
+        # Sort new posts to the top
+        sorted_posts = sorted(posts, key=lambda p: p["id"] not in new_ids)
+        for p in sorted_posts:
+            badge = " 🆕" if p["id"] in new_ids else ""
+            with st.expander(f"**{p['title']}**{badge}", expanded=False):
+                col1, col2 = st.columns([1, 2])
+                with col1:
+                    st.markdown(f"**App:** {p['matched_kw']}")
+                    st.markdown(f"**Space:** {p['space_name']}")
+                    st.markdown(f"**Replies:** {p['replies']}")
+                with col2:
+                    phrases = json.loads(p.get("matched_phrases") or "[]")
+                    if phrases:
+                        st.markdown("**Keywords for reply:** " + "  ".join(f"`{kw}`" for kw in phrases))
+                st.link_button("Open post ↗", p["url"])
+
     st.stop()
 
 # ── analyze panel (live results) ──────────────────────────────────────────────
@@ -207,7 +257,7 @@ if st.session_state.get("running") == "analyze":
     status.empty()
     progress_bar.empty()
     st.success(f"Done — {opps_found} opportunities found from {len(posts)} posts.")
-    st.stop()
+    st.rerun()
 
 # ── metrics ───────────────────────────────────────────────────────────────────
 
@@ -229,13 +279,15 @@ ALL_APPS = [
     "unFormula Smart Column", "Smart Embed View",
 ]
 
-col_score, col_apps = st.columns([1, 3])
+col_score, col_apps, col_status = st.columns([1, 2, 2])
 with col_score:
     min_score = st.slider("Min relevance score", 1, 10, 6)
 with col_apps:
     apps_filter = st.multiselect("Filter by app", ALL_APPS, placeholder="All apps")
+with col_status:
+    status_filter = st.multiselect("Filter by status", STATUS_OPTIONS, placeholder="All statuses")
 
-rows = load_opportunities(min_score, apps_filter)
+rows = load_opportunities(min_score, apps_filter, status_filter)
 
 if not rows:
     st.info("No opportunities match your filters. Try lowering the minimum score.")
@@ -246,28 +298,23 @@ st.caption(f"Showing **{len(rows)}** opportunities")
 # ── opportunity cards ─────────────────────────────────────────────────────────
 
 for row in rows:
-    dot    = SCORE_COLOR.get(row["score"], "⚪")
-    with st.expander(f"{dot} **{row['title']}**", expanded=False):
-        info_col, reply_col = st.columns([1, 2])
-
-        with info_col:
-            st.markdown(f"**Score:** {row['score']}/10")
-            st.markdown(f"**App:** {row['app']}")
-            st.markdown(f"**Space:** {row['space']}")
-            st.markdown(f"**Replies:** {row['replies']}  •  **Posted:** {row['created']}")
-            st.markdown(f"**Why:** {row['reasoning']}")
-            if row["matched_phrases"]:
-                st.markdown("**Keywords:** " + "  ".join(f"`{p}`" for p in row["matched_phrases"]))
-            if row["resource_url"]:
-                st.markdown(f"**Link:** [{row['resource_url']}]({row['resource_url']})")
-            st.link_button("Open post ↗", row["url"])
-
-        with reply_col:
-            st.markdown("**Draft reply:**")
-            st.text_area(
-                label="draft",
-                value=row["draft_reply"],
-                height=180,
-                label_visibility="collapsed",
-                key=f"reply_{row['id']}",
-            )
+    render_card(
+        post={
+            "id":              row["id"],
+            "title":           row["title"],
+            "url":             row["url"],
+            "space_name":      row["space"],
+            "replies":         row["replies"],
+            "created_at":      row["created"],
+            "matched_phrases": json.dumps(row["matched_phrases"]),
+            "resource_url":    row["resource_url"],
+        },
+        analysis={
+            "score":        row["score"],
+            "matched_apps": row["app"].split(", ") if row["app"] else [],
+            "reasoning":    row["reasoning"],
+            "draft_reply":  row["draft_reply"],
+        },
+        key_prefix="saved",
+        status=row["status"],
+    )

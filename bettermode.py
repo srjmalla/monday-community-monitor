@@ -99,19 +99,26 @@ def _match_post(title: str, body: str):
     return None
 
 
-def scrape_spaces(pages_per_space: int = 5, page_size: int = 50) -> list[dict]:
+def scrape_spaces(pages_per_space: int = 5, page_size: int = 50, on_progress=None) -> list[dict]:
     """
     Fetch recent posts from all target spaces, pre-filter by product keyword,
     and return a list of post dicts.
+
+    on_progress(space_name, space_idx, total_spaces, page, pages_per_space, total_matches)
+    is called at the start of each page fetch so the caller can show live progress.
     """
     token = _get_guest_token()
     results = []
     seen_ids: set[str] = set()
+    total_spaces = len(TARGET_SPACES)
 
-    for space_id, space_name in TARGET_SPACES.items():
+    for space_idx, (space_id, space_name) in enumerate(TARGET_SPACES.items(), 1):
         print(f"  Fetching space: {space_name}")
         after = None
-        for page in range(pages_per_space):
+        for page in range(1, pages_per_space + 1):
+            if on_progress:
+                on_progress(space_name, space_idx, total_spaces, page, pages_per_space, len(results))
+
             variables: dict = {"spaceIds": [space_id], "limit": page_size}
             if after:
                 variables["after"] = after

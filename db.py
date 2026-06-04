@@ -35,15 +35,17 @@ def init_db():
                 score           INTEGER DEFAULT 0,
                 reasoning       TEXT,
                 draft_reply     TEXT,
+                status          TEXT DEFAULT 'New',
                 analyzed_at     TEXT DEFAULT (datetime('now'))
             );
         """)
-        for col, defn in [
-            ("matched_phrases", "TEXT"),
-            ("resource_url",    "TEXT"),
+        for table, col, defn in [
+            ("posts",    "matched_phrases", "TEXT"),
+            ("posts",    "resource_url",    "TEXT"),
+            ("analyses", "status",          "TEXT DEFAULT 'New'"),
         ]:
             try:
-                conn.execute(f"ALTER TABLE posts ADD COLUMN {col} {defn}")
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {defn}")
             except sqlite3.OperationalError:
                 pass
 
@@ -90,12 +92,20 @@ def insert_analysis(post_id, is_opportunity, matched_apps, score, reasoning, dra
         )
 
 
+def update_status(post_id: str, status: str):
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE analyses SET status=? WHERE post_id=?",
+            (status, post_id),
+        )
+
+
 def export_opportunities(min_score: int = 6) -> list[dict]:
     with get_conn() as conn:
         rows = conn.execute(
-            """SELECT p.url, p.title, p.space_name, p.created_at, p.replies,
+            """SELECT p.id, p.url, p.title, p.space_name, p.created_at, p.replies,
                       p.matched_phrases, p.resource_url,
-                      a.matched_apps, a.score, a.reasoning, a.draft_reply
+                      a.matched_apps, a.score, a.reasoning, a.draft_reply, a.status
                FROM posts p
                JOIN analyses a ON a.post_id = p.id
                WHERE a.is_opportunity=1 AND a.score >= ?

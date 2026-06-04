@@ -39,10 +39,16 @@ Score 1-10 (1 = no fit, 10 = perfect pain point + clear solution).
 - The full app name (e.g. "VLOOKUP Auto-Link", "Extract AI", "GetSign") must appear at least once.
 
 ### Link
-- Include exactly one link: the RESOURCE URL provided in the prompt.
-- The link goes at the end of the reply — not as an opener.
-- Introduce it with a natural sentence containing a keyword: e.g. "Here's how to set up email to monday board automation: [URL]"
-- Do not stack multiple links or drop a raw URL without context.
+- Format every keyword phrase you use as an HTML anchor tag linking to the RESOURCE URL.
+  Example: <a href="https://jetpackapps.io/...">sync boards monday</a> — not plain text, not markdown.
+- Place the first linked keyword in the first paragraph.
+- Do not include a bare URL anywhere in the reply — the anchor tags carry all the links.
+
+### Format
+- Write the reply as clean HTML ready to paste into a forum editor.
+- Wrap each paragraph in <p> tags.
+- Use only <p> and <a href="..."> tags — no headings, lists, bold, or other markup.
+- Do not include a bare URL anywhere.
 
 ### Tone
 - No openers: "Great question", "I hope this helps", "as a Jetpack team member", "happy to help".
@@ -55,7 +61,7 @@ Score 1-10 (1 = no fit, 10 = perfect pain point + clear solution).
 
 ## Output format
 Respond ONLY with valid JSON:
-{{"is_opportunity": true, "matched_apps": ["App Name"], "score": 8, "reasoning": "one sentence", "draft_reply": "reply text"}}"""
+{{"is_opportunity": true, "matched_apps": ["App Name"], "score": 8, "reasoning": "one sentence", "draft_reply": "HTML reply here"}}"""
 
 
 def analyze_post(post: dict) -> dict:
