@@ -165,6 +165,7 @@ if st.session_state.get("running") == "scrape":
     _db.init_db()
 
     st.subheader("Scraping community.monday.com…")
+    st.caption(f"DB: `{_db.DB_PATH}`")
     progress_bar = st.progress(0.0)
     status       = st.empty()
 

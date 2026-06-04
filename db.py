@@ -1,7 +1,13 @@
 import sqlite3
 import json
+import os
 
-DB_PATH = "scraper.db"
+# Use an absolute path so the DB location never depends on CWD.
+# On Streamlit Cloud the repo directory is read-only, so fall back to /tmp.
+_here = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(_here, "scraper.db")
+if not os.access(_here, os.W_OK):
+    DB_PATH = "/tmp/scraper.db"
 
 
 def get_conn():
