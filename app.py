@@ -146,12 +146,12 @@ def render_card(post: dict, analysis: dict, key_prefix: str, status: str = "New"
 # ── sidebar ───────────────────────────────────────────────────────────────────
 
 with st.sidebar:
-    logo_col1, logo_col2 = st.columns(2)
-    with logo_col1:
-        st.image("https://jetpackapps.io/favicon.ico", width=48)
-    with logo_col2:
-        st.image("https://monday.com/favicon.ico", width=48)
-    st.markdown("### Jetpack Monday\nCommunity Watch")
+    st.image("https://ez9z4hvmwd5.exactdn.com/wp-content/uploads/2025/06/Logo-300x88.png?strip=all", use_container_width=True)
+    logo_col, title_col = st.columns([1, 3])
+    with logo_col:
+        st.image("https://monday.com/favicon.ico", width=28)
+    with title_col:
+        st.markdown("**Community Watch**")
     st.divider()
 
     if st.button("🔍  Scrape new posts", use_container_width=True):
