@@ -98,14 +98,14 @@ def _save_status(post_id: str):
     _db.update_status(post_id, st.session_state[f"status_{post_id}"])
 
 
-def render_card(post: dict, analysis: dict, key_prefix: str, status: str = "New"):
+def render_card(post: dict, analysis: dict, key_prefix: str, status: str = "New", expanded: bool = False):
     score   = analysis.get("score", 0)
     apps    = analysis.get("matched_apps", [])
     dot     = SCORE_COLOR.get(score, "⚪")
     phrases = json.loads(post.get("matched_phrases") or "[]")
     s_icon  = STATUS_ICON.get(status, "")
 
-    with st.expander(f"{dot} {s_icon} **{post['title']}**", expanded=True):
+    with st.expander(f"{dot} {s_icon} **{post['title']}**", expanded=expanded):
         _, status_col = st.columns([3, 1])
         with status_col:
             st.selectbox(
@@ -254,7 +254,7 @@ if st.session_state.get("running") == "analyze":
 
         if analysis.get("is_opportunity") and analysis.get("score", 0) >= 6:
             opps_found += 1
-            render_card(post, analysis, key_prefix="live")
+            render_card(post, analysis, key_prefix="live", expanded=(opps_found == 1))
 
     status.empty()
     progress_bar.empty()
@@ -313,7 +313,7 @@ st.caption(f"Showing **{len(rows)}** of **{opps}** opportunities")
 
 # ── opportunity cards ─────────────────────────────────────────────────────────
 
-for row in rows:
+for i, row in enumerate(rows):
     render_card(
         post={
             "id":              row["id"],
@@ -333,4 +333,5 @@ for row in rows:
         },
         key_prefix="saved",
         status=row["status"],
+        expanded=(i == 0),
     )
