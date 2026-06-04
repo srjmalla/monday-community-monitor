@@ -284,9 +284,18 @@ ALL_APPS = [
     "unFormula Smart Column", "Smart Embed View",
 ]
 
+if opps == 0:
+    if analyzed == 0 and total == 0:
+        st.info("No data yet. Click **Scrape new posts** then **Analyze new posts** to get started.")
+    elif analyzed == 0:
+        st.info(f"{total} posts scraped but not yet analyzed. Click **Analyze new posts**.")
+    else:
+        st.info("No opportunities found. Try running a fresh scrape and analyze.")
+    st.stop()
+
 col_score, col_apps, col_status = st.columns([1, 2, 2])
 with col_score:
-    min_score = st.slider("Min relevance score", 1, 10, 6)
+    min_score = st.slider("Min relevance score", 1, 10, 1)
 with col_apps:
     apps_filter = st.multiselect("Filter by app", ALL_APPS, placeholder="All apps")
 with col_status:
@@ -295,10 +304,12 @@ with col_status:
 rows = load_opportunities(min_score, apps_filter, status_filter)
 
 if not rows:
-    st.info("No opportunities match your filters. Try lowering the minimum score.")
+    all_rows = load_opportunities(1, [], [])
+    if all_rows:
+        st.info(f"{len(all_rows)} opportunities exist — adjust the filters above to see them.")
     st.stop()
 
-st.caption(f"Showing **{len(rows)}** opportunities")
+st.caption(f"Showing **{len(rows)}** of **{opps}** opportunities")
 
 # ── opportunity cards ─────────────────────────────────────────────────────────
 
