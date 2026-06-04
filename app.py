@@ -217,8 +217,8 @@ if st.session_state.get("running") == "analyze":
 
     posts = _db.get_unanalyzed_posts(limit=100)
     if not posts:
-        st.info("No unanalyzed posts — run Scrape first.")
-        st.stop()
+        st.session_state["flash"] = "Nothing new to analyze — showing existing results."
+        st.rerun()
 
     st.subheader(f"Analyzing {len(posts)} posts…")
     progress_bar = st.progress(0)
@@ -261,6 +261,9 @@ if st.session_state.get("running") == "analyze":
     st.rerun()
 
 # ── metrics ───────────────────────────────────────────────────────────────────
+
+if "flash" in st.session_state:
+    st.info(st.session_state.pop("flash"))
 
 total, analyzed, opps = db_stats()
 m1, m2, m3, m4 = st.columns(4)
