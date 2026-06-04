@@ -155,6 +155,11 @@ with st.sidebar:
     if st.button("🤖  Analyze new posts", use_container_width=True):
         st.session_state["running"] = "analyze"
 
+    if st.button("🔄  Re-analyze all", use_container_width=True):
+        _db.init_db()
+        _db.clear_analyses()
+        st.session_state["running"] = "analyze"
+
     st.divider()
     st.caption("Monitors community.monday.com for posts where Jetpack Apps solve a real pain point.")
 

@@ -88,6 +88,11 @@ def get_unanalyzed_posts(limit: int = 100) -> list[dict]:
         return [dict(r) for r in rows]
 
 
+def clear_analyses():
+    with get_conn() as conn:
+        conn.execute("DELETE FROM analyses")
+
+
 def insert_analysis(post_id, is_opportunity, matched_apps, score, reasoning, draft_reply):
     with get_conn() as conn:
         conn.execute(
