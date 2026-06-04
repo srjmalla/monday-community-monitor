@@ -10,7 +10,7 @@ import time
 import urllib.request
 import urllib.error
 from html.parser import HTMLParser
-from config import BETTERMODE_API, COMMUNITY_BASE, TARGET_SPACES, PRODUCT_KEYWORDS
+from config import BETTERMODE_API, COMMUNITY_BASE, TARGET_SPACES, KEYWORD_INDEX, PRODUCT_KEYWORDS
 
 POSTS_QUERY = """
 query FetchPosts($spaceIds: [ID!], $limit: Int!, $after: String) {
@@ -36,7 +36,6 @@ query FetchPosts($spaceIds: [ID!], $limit: Int!, $after: String) {
 }
 """
 
-# Strip HTML tags
 class _Stripper(HTMLParser):
     def __init__(self):
         super().__init__()
@@ -83,19 +82,26 @@ def _gql(query: str, variables: dict, token: str) -> dict:
         raise RuntimeError(f"GraphQL HTTP {e.code}: {body}")
 
 
-def _keyword_match(text: str):
-    """Return the first app name whose keyword appears in text, or None."""
-    lower = text.lower()
-    for app, kws in PRODUCT_KEYWORDS.items():
-        for kw in kws:
-            if kw in lower:
-                return app
+def _match_post(title: str, body: str):
+    """Return match info if any PRODUCT_KEYWORDS fragment is found, else None.
+    Maps the matched app to its KEYWORD_INDEX phrases so Gemini can embed
+    them in the reply for SEO/AEO value."""
+    combined = f"{title.lower()} {body.lower()}"
+    for app, fragments in PRODUCT_KEYWORDS.items():
+        for frag in fragments:
+            if frag in combined:
+                phrases = [e for e in KEYWORD_INDEX if e["app"] == app][:3]
+                return {
+                    "matched_kw": app,
+                    "matched_phrases": json.dumps([e["phrase"] for e in phrases]),
+                    "resource_url": phrases[0]["url"] if phrases else "",
+                }
     return None
 
 
 def scrape_spaces(pages_per_space: int = 5, page_size: int = 50) -> list[dict]:
     """
-    Fetch recent posts from all target spaces, pre-filter by keyword,
+    Fetch recent posts from all target spaces, pre-filter by product keyword,
     and return a list of post dicts.
     """
     token = _get_guest_token()
@@ -121,21 +127,22 @@ def scrape_spaces(pages_per_space: int = 5, page_size: int = 50) -> list[dict]:
                     continue
                 seen_ids.add(pid)
 
-                text = f"{node['title']} {strip_html(node.get('shortContent', ''))}"
-                matched = _keyword_match(text)
-                if not matched:
+                title_text = node["title"]
+                body_text = strip_html(node.get("shortContent", ""))
+                match = _match_post(title_text, body_text)
+                if not match:
                     continue
 
                 results.append({
                     "id": pid,
-                    "title": node["title"],
+                    "title": title_text,
                     "url": f"{COMMUNITY_BASE}{node['relativeUrl']}",
                     "space_name": space_name,
                     "space_id": space_id,
                     "created_at": node.get("createdAt", ""),
                     "replies": node.get("repliesCount", 0),
-                    "content": text[:3000],
-                    "matched_kw": matched,
+                    "content": f"{title_text} {body_text}"[:3000],
+                    **match,
                 })
 
             if not page_info.get("hasNextPage"):

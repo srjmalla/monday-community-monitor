@@ -4,7 +4,6 @@ from google import genai
 from google.genai import types
 from config import PRODUCTS_CONTEXT
 
-# Load .env if present
 _env_file = os.path.join(os.path.dirname(__file__), ".env")
 if os.path.exists(_env_file):
     for _line in open(_env_file):
@@ -20,29 +19,68 @@ if not _api_key:
 _client = genai.Client(api_key=_api_key)
 _MODEL = "gemini-2.5-flash"
 
-_SYSTEM = f"""You are a community engagement specialist for Jetpack Apps (jetpackapps.io), which makes monday.com apps.
-
-Your job: read a community.monday.com post and decide if a Jetpack App directly solves the user's problem.
+_SYSTEM = f"""You are a community engagement specialist for Jetpack Apps (jetpackapps.io), which builds monday.com apps.
 
 {PRODUCTS_CONTEXT}
 
-Rules:
-- Only flag posts where the user has a REAL pain point that a Jetpack product directly addresses.
-- Skip: already-solved threads, off-topic posts, general complaints with no product fit.
-- Draft replies must be genuinely helpful first; mention the product naturally, max 150 words.
-- Score 1-10 (1 = no fit, 10 = perfect pain point + clear solution).
+## When to reply
+Only flag posts where the user has a real pain point that a Jetpack product directly solves.
+Skip: already-solved threads, off-topic posts, general complaints with no product fit.
+Score 1-10 (1 = no fit, 10 = perfect pain point + clear solution).
 
-Respond ONLY with valid JSON matching this schema:
+## SEO/AEO reply rules — follow all of these exactly
+
+### Keywords
+- The prompt includes MATCHED KEYWORDS — exact phrases users type into search engines.
+- Use exactly 2-3 of those phrases in the reply.
+- Place at least one keyword in the first paragraph.
+- Place one keyword in the sentence that introduces the link.
+- Never use the same keyword phrase twice.
+- The full app name (e.g. "VLOOKUP Auto-Link", "Extract AI", "GetSign") must appear at least once.
+
+### Link
+- Include exactly one link: the RESOURCE URL provided in the prompt.
+- The link goes at the end of the reply — not as an opener.
+- Introduce it with a natural sentence containing a keyword: e.g. "Here's how to set up email to monday board automation: [URL]"
+- Do not stack multiple links or drop a raw URL without context.
+
+### Tone
+- No openers: "Great question", "I hope this helps", "as a Jetpack team member", "happy to help".
+- No filler words: "leverage", "seamlessly", "dive into", "streamline", "utilize", "powerful".
+- No em dashes (—) or ellipses (…).
+- Short sentences. Active voice.
+- Solve the problem first. Mention the product in the second half.
+- The reply must be useful even if the reader never clicks the link.
+- Maximum 150 words.
+
+## Output format
+Respond ONLY with valid JSON:
 {{"is_opportunity": true, "matched_apps": ["App Name"], "score": 8, "reasoning": "one sentence", "draft_reply": "reply text"}}"""
 
 
 def analyze_post(post: dict) -> dict:
+    matched_phrases = json.loads(post.get("matched_phrases") or "[]")
+    resource_url = post.get("resource_url") or ""
+    app_name = post.get("matched_kw", "")
+
+    kw_block = ""
+    if matched_phrases:
+        kw_block = (
+            "\n---\n"
+            "MATCHED KEYWORDS (use 2-3 of these exact phrases in the reply):\n"
+            + "\n".join(f"- {p}" for p in matched_phrases)
+            + f"\n\nRESOURCE URL: {resource_url}"
+            + f"\nPRIMARY APP: {app_name}"
+        )
+
     prompt = (
         f"**Title:** {post['title']}\n"
         f"**Space:** {post.get('space_name', '')}\n"
         f"**URL:** {post['url']}\n\n"
         f"{post['content']}"
+        f"{kw_block}"
     )
+
     resp = _client.models.generate_content(
         model=_MODEL,
         contents=prompt,

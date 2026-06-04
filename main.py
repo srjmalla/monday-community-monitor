@@ -63,12 +63,14 @@ def cmd_export(min_score: int = 6, out: str = "opportunities.csv"):
         return
     with open(out, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=[
-            "score", "matched_apps", "space_name", "url", "title",
+            "score", "matched_apps", "matched_phrases",
+            "resource_url", "space_name", "url", "title",
             "created_at", "replies", "reasoning", "draft_reply",
         ])
         writer.writeheader()
         for row in rows:
             row["matched_apps"] = ", ".join(json.loads(row["matched_apps"] or "[]"))
+            row["matched_phrases"] = ", ".join(json.loads(row["matched_phrases"] or "[]"))
             writer.writerow(row)
     print(f"Exported {len(rows)} opportunities → {out}")
 
