@@ -86,8 +86,8 @@ SCORE_COLOR = {10: "🔴", 9: "🔴", 8: "🟠", 7: "🟡", 6: "🟢"}
 
 STATUS_OPTIONS = ["New", "Stuck", "Ready to review", "Not relevant", "Responded"]
 STATUS_ICON = {
-    "New":             "🔵",
-    "Stuck":           "🟠",
+    "New":             "🌱",
+    "Stuck":           "⚠️",
     "Ready to review": "🔍",
     "Not relevant":    "⛔",
     "Responded":       "✅",
