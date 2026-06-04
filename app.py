@@ -86,11 +86,11 @@ SCORE_COLOR = {10: "🔴", 9: "🔴", 8: "🟠", 7: "🟡", 6: "🟢"}
 
 STATUS_OPTIONS = ["New", "Stuck", "Ready to review", "Not relevant", "Responded"]
 STATUS_ICON = {
-    "New":             "🆕",
-    "Stuck":           "🟡",
-    "Ready to review": "👀",
-    "Not relevant":    "❌",
-    "Responded":       "✅",
+    "New":             "[NEW]",
+    "Stuck":           "[STUCK]",
+    "Ready to review": "[REVIEW]",
+    "Not relevant":    "[SKIP]",
+    "Responded":       "[DONE]",
 }
 
 
@@ -111,7 +111,7 @@ def render_card(post: dict, analysis: dict, key_prefix: str, status: str = "New"
             st.selectbox(
                 "Status",
                 STATUS_OPTIONS,
-                format_func=lambda s: f"{STATUS_ICON.get(s, '')}  {s}",
+                format_func=lambda s: f"{STATUS_ICON.get(s, '')}  {s}",  # e.g. [NEW]  New
                 index=STATUS_OPTIONS.index(status) if status in STATUS_OPTIONS else 0,
                 key=f"status_{post['id']}",
                 on_change=_save_status,
